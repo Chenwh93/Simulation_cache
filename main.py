@@ -4,7 +4,7 @@ import threading
 from VNF_Node import VNF_Node
 from All_thread import sender, RX_thread, handel_flow, helper
 
-queue_size = 1000
+queue_size = 1000 # default
 #flow_size = [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
 #flow_size = [31, 26, 34, 20, 15, 49, 25, 29, 26, 48, 45, 35, 12, 26, 47, 40, 47, 17, 27, 46]
 #flow_size = [80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80]
