@@ -118,7 +118,7 @@ class handel_flow(threading.Thread):
         next_id = 0
         global tran_flow
         for j in range(len(connection[id-1])):
-            if connection[id-1][j] == 1:
+            if connection[id-1][j] == 1:  #maybe need to change
                 next_id = j + 1
         tran_flow[id-1][next_id-1] = f_s
         #tran_flow = f_s
