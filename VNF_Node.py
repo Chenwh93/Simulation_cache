@@ -11,7 +11,7 @@ class VNF_Node(object):
         self.delay = 0
         self.packet_loss = 0
         self.drop_count = 0
-        self.ins_num = 1
+        #self.ins_num = 1
         self.r_flow_size = 0
         self.id = id
 

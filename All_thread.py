@@ -1,6 +1,7 @@
 import threading
 import time
 import numpy as np
+import globalvar as gl
 import queue
 
 service_time = 100  # ms
@@ -12,6 +13,7 @@ tran_flow = np.zeros((100,100))
 drop_count_list = np.zeros(100)
 throughput_list = np.zeros(100)
 latency_list = np.zeros(100)
+ins_num_list = np.zeros(100, dtype=np.int)
 
 
 class flow:
@@ -60,10 +62,10 @@ class RX_thread(threading.Thread):
 
 
 class handel_flow(threading.Thread):
-    def __init__(self, rx_queue, ins_num, tx_queue, name, id, connection):
+    def __init__(self, rx_queue, tx_queue, name, id, connection):
         super().__init__()
         self.rx_queue = rx_queue
-        self.ins_num = ins_num
+        self.ins_num = 0
         self.tx_queue = tx_queue
         self.throughput = 0
         self.name = name
@@ -80,6 +82,7 @@ class handel_flow(threading.Thread):
             timer1 = time.time()
             f_count = 0
             while not self.rx_queue.empty():
+                self.ins_num = self.get_ins_num(self.id)
                 for i in range(self.ins_num):
                     if not self.rx_queue.empty():
                         f = self.rx_queue.get_nowait()
@@ -138,10 +141,15 @@ class handel_flow(threading.Thread):
         global latency_list
         latency_list[id] = value
 
+    def get_ins_num(self, id):
+        ins_num = ins_num_list[id]
+        return ins_num
+
 
 class sender(threading.Thread):
     def __init__(self, flow_size_list):
         super().__init__()
+        gl.init()
         self.flow_size_list = flow_size_list
 
     def run(self):
@@ -153,6 +161,7 @@ class sender(threading.Thread):
             index = index + 1
             time.sleep(0.5)
         break_flag = True
+        gl.set_value(break_flag)
 
     def set_flow_size(self, f_s):
         global flow_size
@@ -171,3 +180,9 @@ class helper():
     def get_packetloss(self, id):
         packetloss_result = drop_count_list[id]
         return packetloss_result
+
+    def set_vm_ins_num(self, id, vm):
+        ins_num_list[id] = vm
+
+    def get_vm_ins_num(selfself, id):
+        return ins_num_list[id]
