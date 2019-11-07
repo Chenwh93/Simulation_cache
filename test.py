@@ -1,5 +1,6 @@
 import numpy as np
 from topology import Topo
+import queue
 
 sfc_list = [1, 2, 3, 4]
 
@@ -27,25 +28,12 @@ def set_connection(conn, path):
     return
 
 
-# env = Topo()
+#env = Topo()
 # p = env.get_path(21, 33, sfc)
 # print(p)
 # set_connection(connection,p)
 # print(connection)
 #env.print_topo()
 #p = env.get_shortest_path(20,29)
-th_l = []
-la_l = []
-pa_l = []
-for i in range(len(sfc_list)):
-    th_tmp_l = []
-    th_l.append(th_tmp_l)
-    la_tmp_l = []
-    la_l.append(la_tmp_l)
-    pa_tmp_l = []
-    pa_l.append(pa_tmp_l)
-th_l[0].append(1)
-print(th_l)
-print(la_l)
-print(pa_l)
 #print(c)
+print(np.linspace(10,10,10, dtype=np.int))

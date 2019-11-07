@@ -1,6 +1,6 @@
 import queue
 import threading
-from All_thread import RX_thread, handel_flow
+from All_thread import RX_thread, handle_flow
 
 
 class VNF_Node(object):

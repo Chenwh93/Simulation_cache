@@ -59,8 +59,8 @@ class DDPG(object):
     def choose_action(self, s):
         #probs = self.sess.run(self.a, {self.s: s})
         probs = self.sess.run(self.a, {self.s: s[np.newaxis, :]})
-        #return np.random.choice(np.arange(probs.shape[1]), p=probs.ravel())
-        return np.argmax(probs.ravel())
+        return np.random.choice(np.arange(probs.shape[1]), p=probs.ravel())
+        #return np.argmax(probs.ravel())
 
     def learn(self):
         # soft target replacement
@@ -84,13 +84,13 @@ class DDPG(object):
 
     def _build_a(self, s, scope, trainable):
         with tf.variable_scope(scope):
-            net = tf.layers.dense(s, 30, activation=tf.nn.relu, name='l1', trainable=trainable)
+            net = tf.layers.dense(s, 60, activation=tf.nn.relu, name='l1', trainable=trainable)
             a = tf.layers.dense(net, self.n_action, activation=tf.nn.softmax, name='a', trainable=trainable)
             return a
 
     def _build_c(self, s, a, scope, trainable):
         with tf.variable_scope(scope):
-            n_l1 = 30
+            n_l1 = 60
             w1_s = tf.get_variable('w1_s', [self.n_state, n_l1], trainable=trainable)
             w1_a = tf.get_variable('w1_a', [self.n_action, n_l1], trainable=trainable)
             b1 = tf.get_variable('b1', [1, n_l1], trainable=trainable)
