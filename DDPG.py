@@ -5,13 +5,15 @@ TAU = 0.01  # soft replacement
 GAMMA = 0.9
 single_state = 1
 MEMORY_CAPACITY = 10000
-BATCH_SIZE = 32
+BATCH_SIZE = 50
 single_action = 1
+well_reward_limit = -0.2
+well_reward_factor = 0.6
 
 
 class DDPG(object):
     def __init__(self, sess, n_state, n_action, id, a_learning_rate=0.001, c_learning_rate=0.002):
-        self.memory = np.zeros((MEMORY_CAPACITY, n_state * 2 + single_action + 1), dtype=np.float32)
+        self.memory = np.zeros((MEMORY_CAPACITY, n_state * 2 + n_action + 1), dtype=np.float32)
         self.pointer = 0
         self.sess = sess
         self.id = id
@@ -57,16 +59,27 @@ class DDPG(object):
         self.sess.run(tf.global_variables_initializer())
 
     def choose_action(self, s):
-        #probs = self.sess.run(self.a, {self.s: s})
+        # probs = self.sess.run(self.a, {self.s: s})
         probs = self.sess.run(self.a, {self.s: s[np.newaxis, :]})
-        return np.random.choice(np.arange(probs.shape[1]), p=probs.ravel())
-        #return np.argmax(probs.ravel())
+        return probs
+        # return np.argmax(probs.ravel())
+        # return self.sess.run(self.a, {self.s: s[np.newaxis, :]})
 
     def learn(self):
         # soft target replacement
         self.sess.run(self.soft_replace)
 
-        indices = np.random.choice(MEMORY_CAPACITY, size=BATCH_SIZE)
+        well_ex = self.memory[self.memory[:, self.n_state + self.n_action] > well_reward_limit]
+        well_ex_len = np.shape(well_ex)[0]
+        if well_ex_len > 0:
+            well_ex_len_ = round(well_ex_len * well_reward_factor)
+            if well_ex_len_ > BATCH_SIZE:
+                well_ex_len_ = round(BATCH_SIZE * well_reward_factor)
+            well_ex_i = np.random.choice(well_ex_len, size=well_ex_len_)
+            other_ex_i = np.random.choice(MEMORY_CAPACITY, size=(BATCH_SIZE - well_ex_len_))
+            indices = list(well_ex_i) + list(other_ex_i)
+        else:
+            indices = np.random.choice(MEMORY_CAPACITY, size=BATCH_SIZE)
         bt = self.memory[indices, :]
         bs = bt[:, :self.n_state]
         ba = bt[:, self.n_state: self.n_state + self.n_action]
@@ -77,22 +90,47 @@ class DDPG(object):
         self.sess.run(self.ctrain, {self.s: bs, self.a: ba, self.r: br, self.s_: bs_})
 
     def store_transition(self, s, a, r, s_):
-        transition = np.hstack((s, a, [r], s_))
-        index = self.pointer % MEMORY_CAPACITY  # replace the old memory with new memory
-        self.memory[index, :] = transition
-        self.pointer += 1
+        if r < well_reward_limit:
+            if self.pointer < MEMORY_CAPACITY:
+                # if np.random.rand(1)[0] < 0.8:
+                transition = np.hstack((s, a, r, s_))
+                index = self.pointer % MEMORY_CAPACITY  # replace the old memory with new memory
+                self.memory[index, :] = transition
+                self.pointer += 1
+                # else:
+                #     pass
+            else:
+                if np.random.rand(1)[0] < 0.1:
+                    transition = np.hstack((s, a, r, s_))
+                    index = self.pointer % MEMORY_CAPACITY  # replace the old memory with new memory
+                    self.memory[index, :] = transition
+                    self.pointer += 1
+                else:
+                    pass
+        else:
+            transition = np.hstack((s, a, r, s_))
+            index = self.pointer % MEMORY_CAPACITY  # replace the old memory with new memory
+            self.memory[index, :] = transition
+            self.pointer += 1
 
     def _build_a(self, s, scope, trainable):
         with tf.variable_scope(scope):
-            net = tf.layers.dense(s, 60, activation=tf.nn.relu, name='l1', trainable=trainable)
-            a = tf.layers.dense(net, self.n_action, activation=tf.nn.softmax, name='a', trainable=trainable)
+            net1 = tf.layers.dense(s, 64, activation=tf.nn.relu, name='l1', trainable=trainable)
+            net2 = tf.layers.dense(net1, 128, activation=tf.nn.relu, name='l2', trainable=trainable)
+            net3 = tf.layers.dense(net2, 256, activation=tf.nn.relu, name='l3', trainable=trainable)
+            a = tf.layers.dense(net3, self.n_action, activation=tf.nn.softmax, name='a', trainable=trainable)
             return a
 
     def _build_c(self, s, a, scope, trainable):
         with tf.variable_scope(scope):
-            n_l1 = 60
+            n_l1 = 64
             w1_s = tf.get_variable('w1_s', [self.n_state, n_l1], trainable=trainable)
             w1_a = tf.get_variable('w1_a', [self.n_action, n_l1], trainable=trainable)
             b1 = tf.get_variable('b1', [1, n_l1], trainable=trainable)
             net = tf.nn.relu(tf.matmul(s, w1_s) + tf.matmul(a, w1_a) + b1)
-            return tf.layers.dense(net, 1, trainable=trainable)  # Q(s,a)
+            net_ = tf.layers.dense(net, 1, trainable=trainable)
+            net2 = tf.layers.dense(net_, 128, activation=tf.nn.relu, name='l2', trainable=trainable)
+            net3 = tf.layers.dense(net2, 256, activation=tf.nn.relu, name='l3', trainable=trainable)
+            c = tf.layers.dense(net3, 1, name='c', trainable=trainable)
+            #return tf.layers.dense(net, 1, trainable=trainable)  # Q(s,a)
+            return c

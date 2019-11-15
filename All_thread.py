@@ -21,7 +21,9 @@ tran_flow = np.zeros((100,100))
 drop_count_list = np.zeros(100)
 throughput_list = np.zeros(100)
 latency_list = np.zeros(100)
+rx_throughput_list = np.zeros(100)
 ins_num_list = np.zeros(100, dtype=np.int)
+sfc = [1, 3, 4]
 
 
 class flow:
@@ -73,14 +75,17 @@ class RX_thread(threading.Thread):
                 time.sleep(0.01)
                 timer2 = time.time()
             # if timer2 - timer1 >= 1:
+            #     self.set_rx_throughput(self.id, f_count)
+            # if timer2 - timer1 >= 1:
             #     str = "Node %d Rx_throughput: %d f/s\n" % (self.id, f_count)
             #     sys.stdout.write(str)
             #time.sleep(0.5)
 
     def get_flow_size(self, id):
         f_s = 0
-        if self.id == 1:
+        if self.id == sfc[0]:
             f_s = flow_size
+            self.set_rx_throughput(id, flow_size)
         else:
             for i in range(len(tran_flow[:,id-1])):
                 if tran_flow[i][id-1] > 0:
@@ -91,6 +96,11 @@ class RX_thread(threading.Thread):
     def set_drop_count(self, id, value):
         global drop_count_list
         drop_count_list[id] = value
+
+    def set_rx_throughput(self,id, value):
+        global rx_throughput_list
+        rx_throughput_list[id] = value
+
 
 
 
@@ -114,29 +124,51 @@ class handle_flow(threading.Thread):
         global handle_clear_flag
         while True:
             f_batch = []
-            timer1 = time.time()
+            #timer1 = time.time()
             f_count = 0
             while not self.rx_queue.empty() or self.id > 0:
+                while self.rx_queue.empty():
+                    time.sleep(0.1)
                 self.ins_num = self.get_ins_num(self.id)
+                #timer3 = time.time()
                 for i in range(self.ins_num):
-                    timer2 = time.time()
-                    if not self.rx_queue.empty() and timer2 - timer1 < 1:
-                        #f = self.rx_queue.get_nowait()
+                    #timer2 = time.time()
+                    # if self.id == sfc[0]:
+                    #     if not self.rx_queue.empty() and timer2 - timer1 < 1:
+                    #         #f = self.rx_queue.get_nowait()
+                    #         f = self.rx_queue.get()
+                    #         f_count = f_count + 1
+                    #         f_batch.append(f)
+                    # else:
+                    #     if not self.rx_queue.empty() and timer2 - timer1 < 1 and f_count <= self.get_last_throughput(self.id):
+                    #         #f = self.rx_queue.get_nowait()
+                    #         f = self.rx_queue.get()
+                    #         f_count = f_count + 1
+                    #         f_batch.append(f)
+                    if not self.rx_queue.empty():
+                        # f = self.rx_queue.get_nowait()
                         f = self.rx_queue.get()
+                        f_count = f_count + 1
                         f_batch.append(f)
                 time.sleep(service_time / 1000)
+                #timer4 = time.time()
                 end_time = time.time()
-                f_count = f_count + len(f_batch)
-
-                if timer2 - timer1 >= 1:
-                    self.throughput = f_count
-                    self.set_tran_flow(self.throughput, self.id, self.connection)
-                    # str2 = "%s Throughput: %d f/s VMs: %d\n" % (
-                    # self.name, self.throughput / (timer2 - timer1), self.ins_num)
-                    # sys.stdout.write(str2)
-                    self.set_throughput(self.id, self.throughput / (timer2 - timer1))
-                    f_count = 0
-                    timer1 = time.time()
+                #if timer2 - timer1 >= 1:
+                #self.throughput = f_count / (timer4 - timer3)
+                #self.throughput = f_count * (1000/ service_time)
+                self.throughput = self.ins_num * (1000 / service_time)
+                if self.throughput > self.get_rx_throughput(self.id) and self.id == sfc[0]:
+                    self.throughput = rx_throughput_list[sfc[0]]
+                if self.throughput > self.get_rx_throughput(self.id) and self.id != sfc[0]:
+                    self.throughput = self.get_rx_throughput(self.id)
+                self.set_tran_flow(self.throughput, self.id, self.connection)
+                # str2 = "%s Throughput: %d f/s VMs: %d\n" % (
+                # self.name, self.throughput, self.ins_num)
+                # sys.stdout.write(str2)
+                #self.set_throughput(self.id, self.throughput / (timer2 - timer1))
+                self.set_throughput(self.id, self.throughput)
+                f_count = 0
+                #timer1 = time.time()
                 for j in range(len(f_batch)):
                     f_batch[j].f_time = end_time
                     self.tx_queue.put_nowait(f_batch[j])
@@ -171,6 +203,7 @@ class handle_flow(threading.Thread):
             if connection[id-1][j] == 1:  #maybe need to change
                 next_id = j + 1
         tran_flow[id-1][next_id-1] = f_s
+        self.set_rx_throughput(next_id, f_s)
         #tran_flow = f_s
 
     def get_avg_delay(self, delay_list):
@@ -188,16 +221,40 @@ class handle_flow(threading.Thread):
         global latency_list
         latency_list[id] = value
 
+    def get_last_throughput(self, id):
+        last_id = 0
+        for i in range(len(sfc)):
+            if sfc[i] == id:
+                last_id = sfc[i-1]
+        last_th = throughput_list[last_id]
+        return last_th
+
     def get_ins_num(self, id):
         ins_num = ins_num_list[id]
+        # ins_num = 1
+        # if id == 1:
+        #     ins_num = 2
+        # if id == 3:
+        #     ins_num = 10
+        # if id == 4:
+        #     ins_num = 4
         return ins_num
+
+    def set_rx_throughput(self,id, value):
+        global rx_throughput_list
+        rx_throughput_list[id] = value
+
+    def get_rx_throughput(self,id):
+        return rx_throughput_list[id]
 
     def clear_para(self, rx_queue, tx_queue, delay_l):
         global throughput_list
         global latency_list
         global ins_num_list
+        global tran_flow
         throughput_list = np.zeros(100)
         latency_list = np.zeros(100)
+        tran_flow = np.zeros((100, 100))
         if not rx_queue.empty():
             rx_queue.queue.clear()
         if not tx_queue.empty():
@@ -248,6 +305,8 @@ class sender(threading.Thread):
                         self.set_flow_size(f_size)
                         index = index + 1
                         time.sleep(1)
+                        if gl.get_continue_flag():
+                            break
                 str = "Round %d complete\n" % (i+1)
                 sys.stdout.write(str)
                 if i + 2 >= self.MAX_EPISODES:
@@ -296,3 +355,6 @@ class helper():
 
     def get_round_start_flag(self):
         return round_start_flag
+
+    def get_rx_throughput(self, id):
+        return rx_throughput_list[id]
