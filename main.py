@@ -12,7 +12,7 @@ import sys
 import os
 from matplotlib.pyplot import plot,savefig
 
-sys.stdout = open('sim_recode.log', mode = 'w',encoding='utf-8')
+#sys.stdout = open('sim_recode.log', mode = 'w',encoding='utf-8')
 
 queue_size = 1000  # default
 # flow_size = [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
@@ -41,7 +41,7 @@ packetloss_factor = 1
 cost_factor = 0.5
 cost = 1
 
-MAX_EPISODES = 60
+MAX_EPISODES = 80
 MAX_EP_STEPS = 500
 
 index = 0
@@ -60,7 +60,7 @@ var = [3, 3, 3, 3]
 c = [0, 0, 0, 0]
 target_util = 1
 well_reward_count = [0, 0, 0, 0]
-random_init = 5
+random_init = 20
 epsilon_decay = 0.995
 last_u = -999
 
@@ -180,7 +180,7 @@ def step(action):
             vm = h.get_vm_ins_num(a)
             vm_ = vm_scale_in(vm)
             if last_u == target_util:
-                scale_reward = 10
+                scale_reward += 10
             if vm_ == 0:
                 h.set_vm_ins_num(a, 1)
             else:
@@ -192,7 +192,7 @@ def step(action):
             vm = h.get_vm_ins_num(a)
             vm_ = vm_scale_out(vm)
             if last_u == target_util:
-                scale_reward = 10
+                scale_reward += 10
             if vm_ <= node_capacity[a - 1]:
                 h.set_vm_ins_num(a, vm_)
             else:
@@ -213,8 +213,8 @@ def step(action):
         # r = - util_error_ - cost_factor * ins_[i] * cost
         #r = - util_error_ - scale_reward
         r = th_[i] - cost_factor * ins_[i] - scale_reward
-        if r >= -0.2:
-            well_reward_count[active_node_list[i] - 1] += 1
+        # if r >= -0.2:
+        #     well_reward_count[active_node_list[i] - 1] += 1
         reward.append(r)
     # return reward, th_, la_, pa_, ins_
     return reward, u_, th_, pa_, ins_
@@ -365,7 +365,7 @@ def run_proc1():
     helper1 = helper()
     for i in range(node_len):
         helper1.set_vm_ins_num(node_list[i].id, default_vm_num)
-        tmp_rx_thread = RX_thread(node_list[i].rx_queue, node_list[i].drop_count, node_list[i].id, connection)
+        tmp_rx_thread = RX_thread(node_list[i].rx_queue, node_list[i].id, connection)
         tmp_handle_thread = handle_flow(node_list[i].rx_queue, node_list[i].tx_queue, "node" + str(node_list[i].id),
                                         node_list[i].id, connection)
         rx_thread_list.append(tmp_rx_thread)
@@ -412,15 +412,15 @@ def run_proc2():
                 for i in range(len(sfc_list)):
                     plt.subplot(3, len(sfc_list), i + 9)
                     plt.plot(np.arange(len(pa_l[i])), pa_l[i])
-                #plt.show()
-                savefig("sim_1.png")
+                plt.show()
+                #savefig("sim_1.png")
                 plt.figure()
                 for i in range(len(sfc_list)):
                     plt.subplot(len(sfc_list), 1, i + 1)
                     plt.plot(np.arange(len(rw_l[i])), rw_l[i])
-                #plt.show()
-                savefig("sim_2.png")
-                sys.stdout.close()
+                plt.show()
+                #savefig("sim_2.png")
+                #sys.stdout.close()
                 os._exit(0)
                 break
 

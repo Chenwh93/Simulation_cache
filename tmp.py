@@ -4,7 +4,6 @@ import numpy as np
 import globalvar as gl
 import queue
 import sys
-import os
 
 service_time = 100  # ms
 flow_size = 0
@@ -12,9 +11,8 @@ break_flag = False
 exit_flag = False
 round_start_flag = False
 complete_flag = False
-
-all_clear_flag = False
-clear_flag = np.zeros(4, dtype=np.int)
+rx_clear_flag = False
+handle_clear_flag = False
 final_round_flag = False
 default_vm_num = 1
 delay_span = 50
@@ -27,16 +25,6 @@ rx_throughput_list = np.zeros(100)
 ins_num_list = np.zeros(100, dtype=np.int)
 sfc = [1, 3, 4]
 
-drop_count_list_lock = threading.Lock()
-rx_throughput_list_lock = threading.Lock()
-tran_flow_lock = threading.Lock()
-throughput_list_lock = threading.Lock()
-clear_flag_lock = threading.Lock()
-all_clear_flag_lock = threading.Lock()
-complete_flag_lock = threading.Lock()
-ins_num_list_lock = threading.Lock()
-
-
 
 class flow:
     s_time = 0
@@ -44,46 +32,48 @@ class flow:
 
 
 class RX_thread(threading.Thread):
-    def __init__(self, rx_queue, id, connection):
+    def __init__(self, rx_queue, drop_count, id, connection):
         super().__init__()
         self.rx_queue = rx_queue
-        self.drop_count = 0
+        self.drop_count = drop_count
         self.id = id
         self.connection = connection
 
     def run(self):
+        global rx_clear_flag
+        global complete_flag
         global drop_count_list
-        while not break_flag:
-            # str6 = "RX %d Alive\n" % (self.id)
-            # sys.stdout.write(str6)
+        while True:
+            timer1 = time.time()
+            f_count = 0
+            f_size = int(self.get_flow_size(self.id))
+            s_time = time.time()
+
+            for i in range(f_size):
+                tmp_flow = flow
+                tmp_flow.s_time = s_time
+                if not self.rx_queue.full():
+                    self.rx_queue.put_nowait(tmp_flow)
+                    f_count = f_count + 1
+                else:
+                    self.drop_count = self.drop_count + 1
+            self.set_drop_count(self.id, self.drop_count)
+            if complete_flag:
+                if not self.rx_queue.empty():
+                    self.rx_queue.queue.clear()
+                self.drop_count = 0
+                drop_count_list = np.zeros(100)
+                rx_clear_flag = True
+                #print('Node', self.id, 'rx thread para clear')
+                if handle_clear_flag and rx_clear_flag and gl.get_continue_flag():
+                    complete_flag = False
+                    #print("Node", self.id, "In rx thread both thread clear")
             if break_flag:
                 break
-            if complete_flag:
-                self.drop_count = 0
-            else:
-                timer1 = time.time()
-                f_count = 0
-                f_size = int(self.get_flow_size(self.id))
-                s_time = time.time()
-
-                for i in range(f_size):
-                    tmp_flow = flow
-                    tmp_flow.s_time = s_time
-                    if not self.rx_queue.full():
-                        self.rx_queue.put(tmp_flow)
-                        f_count = f_count + 1
-                    else:
-                        self.drop_count = self.drop_count + 1
-                self.set_drop_count(self.id, self.drop_count)
-
+            timer2 = time.time()
+            while timer2 - timer1 < 1:
+                time.sleep(0.01)
                 timer2 = time.time()
-                while timer2 - timer1 < 1:
-                    time.sleep(0.01)
-                    timer2 = time.time()
-
-
-
-
             # if timer2 - timer1 >= 1:
             #     self.set_rx_throughput(self.id, f_count)
             # if timer2 - timer1 >= 1:
@@ -105,16 +95,11 @@ class RX_thread(threading.Thread):
 
     def set_drop_count(self, id, value):
         global drop_count_list
-        drop_count_list_lock.acquire()
         drop_count_list[id] = value
-        drop_count_list_lock.release()
 
     def set_rx_throughput(self,id, value):
         global rx_throughput_list
-        rx_throughput_list_lock.acquire()
         rx_throughput_list[id] = value
-        rx_throughput_list_lock.release()
-
 
 
 
@@ -134,54 +119,45 @@ class handle_flow(threading.Thread):
         self.connection = connection
 
     def run(self):
-        #global exit_flag
+        global exit_flag
         global complete_flag
-        global clear_flag
-        global all_clear_flag
-        while not break_flag:
-            # str7 = "handle %d Alive\n" % (self.id)
-            # sys.stdout.write(str7)
-
-            if complete_flag:
-                self.clear_para(self.rx_queue, self.tx_queue)
-                if len(self.delay_list) > 0:
-                    self.delay_list.clear()
-                self.set_clear_flag(self.id)
-
-                if self.check_clear_flag():
-                    all_clear_flag_lock.acquire()
-                    all_clear_flag = True
-                    all_clear_flag_lock.release()
-                else:
-                    continue
-
-                # while not (all_clear_flag and gl.get_continue_flag()):
-                #     time.sleep(0.1)
-                if all_clear_flag and gl.get_continue_flag():
-                    complete_flag_lock.acquire()
-                    complete_flag = False
-                    complete_flag_lock.release()
-                else:
-                    continue
-            else:
-                f_batch = []
-                #timer1 = time.time()
-                f_count = 0
-
+        global handle_clear_flag
+        while True:
+            sr = "%d alive\n" % (self.id)
+            sys.stdout.write(sr)
+            f_batch = []
+            #timer1 = time.time()
+            f_count = 0
+            while not self.rx_queue.empty() or self.id > 0:
+                while self.rx_queue.empty():
+                    time.sleep(0.1)
                 self.ins_num = self.get_ins_num(self.id)
                 #timer3 = time.time()
                 for i in range(self.ins_num):
+                    #timer2 = time.time()
+                    # if self.id == sfc[0]:
+                    #     if not self.rx_queue.empty() and timer2 - timer1 < 1:
+                    #         #f = self.rx_queue.get_nowait()
+                    #         f = self.rx_queue.get()
+                    #         f_count = f_count + 1
+                    #         f_batch.append(f)
+                    # else:
+                    #     if not self.rx_queue.empty() and timer2 - timer1 < 1 and f_count <= self.get_last_throughput(self.id):
+                    #         #f = self.rx_queue.get_nowait()
+                    #         f = self.rx_queue.get()
+                    #         f_count = f_count + 1
+                    #         f_batch.append(f)
                     if not self.rx_queue.empty():
                         # f = self.rx_queue.get_nowait()
                         f = self.rx_queue.get()
-                        f_count += 1
+                        f_count = f_count + 1
                         f_batch.append(f)
                 time.sleep(service_time / 1000)
                 #timer4 = time.time()
                 end_time = time.time()
                 #if timer2 - timer1 >= 1:
                 #self.throughput = f_count / (timer4 - timer3)
-                # self.throughput = f_count * (1000/ service_time)
+                #self.throughput = f_count * (1000/ service_time)
                 self.throughput = self.ins_num * (1000 / service_time)
                 if self.throughput > self.get_rx_throughput(self.id) and self.id == sfc[0]:
                     self.throughput = rx_throughput_list[sfc[0]]
@@ -193,36 +169,42 @@ class handle_flow(threading.Thread):
                 # sys.stdout.write(str2)
                 #self.set_throughput(self.id, self.throughput / (timer2 - timer1))
                 self.set_throughput(self.id, self.throughput)
-                #f_count = 0
+                f_count = 0
                 #timer1 = time.time()
-                # for j in range(len(f_batch)):
-                #     f_batch[j].f_time = end_time
-                #     self.tx_queue.put(f_batch[j])
-                #     if len(self.delay_list) == delay_span:
-                #         self.avg_delay = self.get_avg_delay(self.delay_list)
-                #         self.delay_list.clear()
-                #         #str1 = "%s Latency: %d ms  Packet loss: %d" % (self.name, self.avg_delay, drop_count_list[self.id])
-                #         #print(str1)
-                #         self.set_latency(self.id, self.avg_delay)
-                #     delay = (f_batch[j].f_time - f_batch[j].s_time) * 1000
-                #     self.delay_list.append(delay)
+                for j in range(len(f_batch)):
+                    f_batch[j].f_time = end_time
+                    self.tx_queue.put_nowait(f_batch[j])
+                    if len(self.delay_list) == delay_span:
+                        self.avg_delay = self.get_avg_delay(self.delay_list)
+                        self.delay_list.clear()
+                        #str1 = "%s Latency: %d ms  Packet loss: %d" % (self.name, self.avg_delay, drop_count_list[self.id])
+                        #print(str1)
+                        self.set_latency(self.id, self.avg_delay)
+                    delay = (f_batch[j].f_time - f_batch[j].s_time) * 1000
+                    self.delay_list.append(delay)
 
                 f_batch.clear()
 
-
-
-            # if exit_flag:
-            #     break
+                if complete_flag:
+                    self.clear_para(self.rx_queue,self.tx_queue,self.delay_list)
+                    handle_clear_flag = True
+                    #print('Node', self.id, 'handle thread para clear')
+                    if handle_clear_flag and rx_clear_flag and gl.get_continue_flag():
+                        complete_flag = False
+                        #print("Node", self.id, "In handle thread both thread clear")
+                if break_flag:
+                    exit_flag = True
+                    break
+            if exit_flag:
+                break
 
     def set_tran_flow(self, f_s, id, connection):
         next_id = 0
         global tran_flow
-        tran_flow_lock.acquire()
         for j in range(len(connection[id-1])):
             if connection[id-1][j] == 1:  #maybe need to change
                 next_id = j + 1
         tran_flow[id-1][next_id-1] = f_s
-        tran_flow_lock.release()
         self.set_rx_throughput(next_id, f_s)
         #tran_flow = f_s
 
@@ -235,9 +217,7 @@ class handle_flow(threading.Thread):
 
     def set_throughput(self, id, value):
         global throughput_list
-        throughput_list_lock.acquire()
         throughput_list[id] = value
-        throughput_list_lock.release()
 
     def set_latency(self, id, value):
         global latency_list
@@ -264,57 +244,26 @@ class handle_flow(threading.Thread):
 
     def set_rx_throughput(self,id, value):
         global rx_throughput_list
-        rx_throughput_list_lock.acquire()
         rx_throughput_list[id] = value
-        rx_throughput_list_lock.release()
 
     def get_rx_throughput(self,id):
         return rx_throughput_list[id]
 
-    def set_clear_flag(self, id):
-        clear_flag_lock.acquire()
-        clear_flag[id - 1] = 1
-        clear_flag_lock.release()
-
-    def clear_para(self, rx_queue, tx_queue):
+    def clear_para(self, rx_queue, tx_queue, delay_l):
         global throughput_list
-        #global latency_list
+        global latency_list
         global ins_num_list
         global tran_flow
-        global rx_throughput_list
-        global drop_count_list
-        throughput_list_lock.acquire()
         throughput_list = np.zeros(100)
-        throughput_list_lock.release()
-        #latency_list = np.zeros(100)
-        tran_flow_lock.acquire()
+        latency_list = np.zeros(100)
         tran_flow = np.zeros((100, 100))
-        tran_flow_lock.release()
-        rx_throughput_list_lock.acquire()
-        rx_throughput_list = np.zeros(100)
-        rx_throughput_list_lock.release()
-        drop_count_list_lock.acquire()
-        drop_count_list = np.zeros(100)
-        drop_count_list_lock.release()
         if not rx_queue.empty():
             rx_queue.queue.clear()
         if not tx_queue.empty():
             tx_queue.queue.clear()
-        ins_num_list_lock.acquire()
+        delay_l.clear()
         for i in range(len(ins_num_list)):
             ins_num_list[i] = default_vm_num
-        ins_num_list_lock.release()
-
-
-    def check_clear_flag(self):
-        result = False
-        cleared_count = 0
-        for i in sfc:
-            if clear_flag[i - 1] == 1:
-                cleared_count += 1
-        if cleared_count == len(sfc):
-            result = True
-        return result
 
 
 
@@ -330,34 +279,23 @@ class sender(threading.Thread):
         global break_flag
         #global round_start_flag
         global complete_flag
-        global clear_flag
+        global rx_clear_flag
+        global handle_clear_flag
         global final_round_flag
         for i in range(self.MAX_EPISODES):
             index = 0
+            rx_clear_flag = False
+            handle_clear_flag = False
             #round_start_flag = True
-            self.init_clear_flag()
             time.sleep(0.5)
             c_f = gl.get_continue_flag()
-            # s1 = "%d %s %s\n" % (i, str(c_f), str(complete_flag))
-            # sys.stdout.write(s1)
-            t1 = time.time()
-            while complete_flag:
-                t2 = time.time()
-                time.sleep(0.01)
-                # if t2 - t1 > 60:
-                #     os._exit(0)
-
             if (c_f or i == 0) and not complete_flag:
-                str0 = "Round %d start\n" % (i + 1)
-                sys.stdout.write(str0)
                 if c_f:
                     continue_flag = False
                     gl.set_continue_flag(continue_flag)
                 r_s_f = True
                 gl.set_round_start_flag(r_s_f)
                 while not gl.get_ready_flag():
-                    # str1 = "not get get_ready_flag\n"
-                    # sys.stdout.write(str1)
                     time.sleep(0.1)
                 if gl.get_ready_flag():
                     r_s_f_ = False
@@ -366,24 +304,19 @@ class sender(threading.Thread):
                     gl.set_ready_flag(r_f_)
                     while index < len(self.flow_size_list):
                         f_size = self.flow_size_list[index]
-                        #print(f_size, index)
                         self.set_flow_size(f_size)
                         index = index + 1
                         time.sleep(1)
                         if gl.get_continue_flag():
                             break
-                str4 = "Round %d complete\n" % (i+1)
-                sys.stdout.write(str4)
+                str = "Round %d complete\n" % (i+1)
+                sys.stdout.write(str)
                 if i + 2 >= self.MAX_EPISODES:
                     final_round_flag = True
                 while not gl.get_learn_complete_flag():
-                    # str2 = "not get get_learn_complete_flag\n"
-                    # sys.stdout.write(str2)
                     time.sleep(0.1)
                 if gl.get_learn_complete_flag():
-                    complete_flag_lock.acquire()
                     complete_flag = True
-                    complete_flag_lock.release()
                     l_f_ = False
                     gl.set_learn_complete_flag(l_f_)
                 #round_start_flag = False
@@ -395,13 +328,6 @@ class sender(threading.Thread):
     def set_flow_size(self, f_s):
         global flow_size
         flow_size = f_s
-
-    def init_clear_flag(self):
-        global clear_flag
-        clear_flag_lock.acquire()
-        for i in range(len(clear_flag)):
-            clear_flag[i] = 0
-        clear_flag_lock.release()
 
 
 class helper():

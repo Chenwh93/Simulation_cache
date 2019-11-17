@@ -116,9 +116,9 @@ class DDPG(object):
     def _build_a(self, s, scope, trainable):
         with tf.variable_scope(scope):
             net1 = tf.layers.dense(s, 64, activation=tf.nn.relu, name='l1', trainable=trainable)
-            net2 = tf.layers.dense(net1, 128, activation=tf.nn.relu, name='l2', trainable=trainable)
-            net3 = tf.layers.dense(net2, 256, activation=tf.nn.relu, name='l3', trainable=trainable)
-            a = tf.layers.dense(net3, self.n_action, activation=tf.nn.softmax, name='a', trainable=trainable)
+            # net2 = tf.layers.dense(net1, 128, activation=tf.nn.relu, name='l2', trainable=trainable)
+            # net3 = tf.layers.dense(net2, 256, activation=tf.nn.relu, name='l3', trainable=trainable)
+            a = tf.layers.dense(net1, self.n_action, activation=tf.nn.softmax, name='a', trainable=trainable)
             return a
 
     def _build_c(self, s, a, scope, trainable):
@@ -128,9 +128,9 @@ class DDPG(object):
             w1_a = tf.get_variable('w1_a', [self.n_action, n_l1], trainable=trainable)
             b1 = tf.get_variable('b1', [1, n_l1], trainable=trainable)
             net = tf.nn.relu(tf.matmul(s, w1_s) + tf.matmul(a, w1_a) + b1)
-            net_ = tf.layers.dense(net, 1, trainable=trainable)
-            net2 = tf.layers.dense(net_, 128, activation=tf.nn.relu, name='l2', trainable=trainable)
-            net3 = tf.layers.dense(net2, 256, activation=tf.nn.relu, name='l3', trainable=trainable)
-            c = tf.layers.dense(net3, 1, name='c', trainable=trainable)
-            #return tf.layers.dense(net, 1, trainable=trainable)  # Q(s,a)
-            return c
+            # net_ = tf.layers.dense(net, 1, trainable=trainable)
+            # net2 = tf.layers.dense(net_, 128, activation=tf.nn.relu, name='l2', trainable=trainable)
+            # net3 = tf.layers.dense(net2, 256, activation=tf.nn.relu, name='l3', trainable=trainable)
+            # c = tf.layers.dense(net3, 1, name='c', trainable=trainable)
+            return tf.layers.dense(net, 1, trainable=trainable)  # Q(s,a)
+            #return c
